@@ -1,0 +1,51 @@
+# Kuratierte Startpunkte für den UB Basel Servicebot
+# Ziel: Service, Recherche, Fachgebiete und Standorte vollständig/priorisiert erfassen.
+# Nicht-Ziel: News, Events, Ausstellungen, temporäre Kampagnen.
+
+# Hauptnavigation
+https://ub.unibas.ch/de/
+https://ub.unibas.ch/en/
+
+# Service
+https://ub.unibas.ch/de/anmelden-ausleihen-bestellen/
+https://ub.unibas.ch/de/oeffnungszeiten/
+https://ub.unibas.ch/de/arbeitsplaetze-lernraeume/
+https://ub.unibas.ch/de/open-science-publizieren-digital-humanities/
+https://ub.unibas.ch/de/schulungen/
+https://ub.unibas.ch/de/ub-als-kantonsbibliothek/
+https://ub.unibas.ch/de/kopieren-drucken-digitalisieren/
+https://ub.unibas.ch/de/anschaffungsvorschlag/
+
+# Recherche
+https://ub.unibas.ch/de/bibliothekskataloge/
+https://ub.unibas.ch/de/bibliothekskataloge/swisscovery-registrierung-und-hilfe/
+https://ub.unibas.ch/de/datenbanken-e-journals-e-books/
+https://ub.unibas.ch/de/find-e-book/
+https://ub.unibas.ch/de/find-e-journal/
+https://ub.unibas.ch/de/online-datenbanken/
+https://ub.unibas.ch/de/digitale-sammlungen/
+https://ub.unibas.ch/de/ki/
+https://ub.unibas.ch/de/neuerwerbungen/
+https://ub.unibas.ch/de/zeitungen/
+
+# Fachgebiete
+https://ub.unibas.ch/de/fachgebiete/
+
+# Standorte
+https://ub.unibas.ch/de/ub-hauptbibliothek/
+https://ub.unibas.ch/de/ub-medizin/
+https://ub.unibas.ch/de/ub-religion/
+https://ub.unibas.ch/de/ub-rosental/
+https://ub.unibas.ch/de/ub-wirtschaft-swa/
+https://ub.unibas.ch/de/bibliotheken-in-basel/
+https://ub.unibas.ch/de/auslastung-standorte/
+
+# Sammlungen
+https://ub.unibas.ch/de/sammlungen/
+https://ub.unibas.ch/de/historische-bestaende/
+
+# Über uns / verbindliche Informationen
+https://ub.unibas.ch/de/kontakt/
+https://ub.unibas.ch/de/organisation/
+https://ub.unibas.ch/de/reglemente-gebuehren/
+https://ub.unibas.ch/de/bibliotheksnetz-region-basel/
