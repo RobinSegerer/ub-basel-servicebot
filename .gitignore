@@ -2,7 +2,11 @@
 __pycache__/
 *.pyc
 .streamlit/secrets.toml
-vectorstore/*
-data/cleaned/*
 .env
 .DS_Store
+
+# lokal gecrawlte Rohdaten nicht pushen
+data/cleaned/
+
+*.bak
+*.urlfix.bak
