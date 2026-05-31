@@ -190,9 +190,131 @@ def keyword_score(query: str, text: str, source: str = "") -> float:
     return score
 
 
+@st.cache_data(show_spinner=False, ttl=3600)
+def expand_query_semantically(query: str) -> dict[str, str]:
+    """
+    Erzeugt robustere semantische Suchtexte.
+    Ziel: Nutzer:innen müssen nicht exakt die UB-/Bibliotheksbegriffe kennen.
+    """
+    prompt = f"""
+Erzeuge Suchtexte für eine semantische Suche auf Webseiten einer Universitätsbibliothek.
+
+Aufgabe:
+1. Erweitere die Nutzerfrage mit verwandten bibliothekarischen Begriffen.
+2. Erzeuge eine kurze hypothetische Zielpassage (HyDE), die auf einer passenden UB-Webseite stehen könnte.
+3. Antworte ausschließlich als JSON mit den Feldern "expanded" und "hyde".
+4. Keine eigentliche Antwort auf die Frage geben.
+
+Berücksichtige mögliche Bereiche:
+Ausleihe, swisscovery, Bibliothekskonto, E-Books, E-Journals, Datenbanken, Volltextzugriff, VPN/Remote Access, Fachgebiete, Fachreferate, Rechercheberatung, Literaturrecherche, systematische Reviews, Open Access, Forschungsdaten, Standorte, Öffnungszeiten, Arbeitsplätze, Kontakt, Schulungen, Reglemente, Gebühren.
+
+Nutzerfrage:
+{query}
+""".strip()
+
+    try:
+        response = client.chat.completions.create(
+            model=CHAT_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Du erzeugst Suchtexte für Retrieval. "
+                        "Du beantwortest die Nutzerfrage nicht. "
+                        "Gib ausschließlich valides JSON zurück."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+        )
+        content = response.choices[0].message.content or ""
+        import json as _json
+        data = _json.loads(content)
+        return {
+            "expanded": str(data.get("expanded", "")).strip(),
+            "hyde": str(data.get("hyde", "")).strip(),
+        }
+    except Exception:
+        return {"expanded": "", "hyde": ""}
+
+
+def semantic_query_variants(query: str) -> list[str]:
+    expansion = expand_query_semantically(query)
+    variants = [query]
+
+    expanded = expansion.get("expanded", "")
+    hyde = expansion.get("hyde", "")
+
+    if expanded:
+        variants.append(query + "\n\nErweiterte Suchbegriffe:\n" + expanded)
+
+    if hyde:
+        variants.append(query + "\n\nHypothetische passende UB-Webseitenpassage:\n" + hyde)
+
+    if expanded or hyde:
+        parts = [query]
+        if expanded:
+            parts.append("Erweiterte Suchbegriffe:\n" + expanded)
+        if hyde:
+            parts.append("Hypothetische passende UB-Webseitenpassage:\n" + hyde)
+        variants.append("\n\n".join(parts))
+
+    out = []
+    seen = set()
+    for v in variants:
+        v = v.strip()
+        if v and v not in seen:
+            seen.add(v)
+            out.append(v)
+    return out
+
+
+def priority_boost(doc: dict[str, Any]) -> float:
+    """
+    Moderate Prioritätsgewichte.
+    Die Priorität unterstützt gute semantische Treffer, dominiert sie aber nicht.
+    """
+    source = str(doc.get("source", "")).lower()
+    source_type = doc.get("source_type")
+    priority = doc.get("priority")
+
+    if "/cmsdata/spezialkataloge/" in source:
+        return -0.08
+
+    if source_type == "bot_truths":
+        return 0.08
+    if source_type in {"glossary", "contacts"}:
+        return 0.06
+
+    if priority == "medium_high":
+        return 0.05
+    if priority == "medium":
+        return 0.03
+    if priority == "low":
+        return 0.00
+    if priority == "very_low":
+        return -0.05
+
+    return 0.0
+
+
 def retrieve(query: str, n_results: int = 20) -> list[dict]:
-    q = embed_query(query)
-    vector_scores = embeddings @ q
+    """
+    Semantisch toleranteres Retrieval:
+    - Originalfrage
+    - LLM-Query-Expansion
+    - HyDE-Suchtext
+    - Score = bester semantischer Treffer über alle Varianten
+      + moderater Keywordscore
+      + moderater Prioritätsboost
+    """
+    variants = semantic_query_variants(query)
+    query_vectors = [embed_query(v) for v in variants]
+
+    score_matrix = np.column_stack([embeddings @ q for q in query_vectors])
+    best_vector_scores = score_matrix.max(axis=1)
+    best_variant_indices = score_matrix.argmax(axis=1)
 
     scored = []
 
@@ -201,37 +323,74 @@ def retrieve(query: str, n_results: int = 20) -> list[dict]:
         text = doc_copy.get("text", "")
         source = doc_copy.get("source", "")
 
-        v_score = float(vector_scores[idx])
+        v_score = float(best_vector_scores[idx])
         k_score = keyword_score(query, text, source)
-        combined_score = v_score + 0.10 * k_score
+        p_boost = priority_boost(doc_copy)
+
+        combined_score = v_score + 0.035 * k_score + p_boost
 
         doc_copy["vector_score"] = v_score
         doc_copy["keyword_score"] = k_score
+        doc_copy["priority_boost"] = p_boost
         doc_copy["score"] = combined_score
+        doc_copy["best_query_variant"] = int(best_variant_indices[idx])
 
         scored.append(doc_copy)
 
     scored.sort(key=lambda d: d["score"], reverse=True)
-    candidates = scored[: max(n_results * 3, 50)]
+    candidates = scored[: max(n_results * 5, 100)]
 
     candidates.sort(
         key=lambda d: (
-            priority_rank(d),
-            -d.get("keyword_score", 0.0),
             -d.get("score", 0.0),
+            priority_rank(d),
+            -d.get("vector_score", 0.0),
         )
     )
+
     return candidates[:n_results]
+
+
+def fix_email_clutter(text: str) -> str:
+    import re
+
+    text = re.sub(
+        r"([A-Za-z0-9._%+\-]+)\s*clutter\s*unibas\.ch",
+        r"\1@unibas.ch",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"([A-Za-z0-9._%+\-]+)clutterunibas\.ch",
+        r"\1@unibas.ch",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"([A-Za-z0-9._%+\-]+)\s*\[at\]\s*unibas\.ch",
+        r"\1@unibas.ch",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return text
 
 
 def build_context(retrieved: list[dict]) -> str:
     blocks = []
     for i, doc in enumerate(retrieved, start=1):
-        blocks.append(
-            f"[Kontext {i} | Priorität: {doc.get('priority')} | Typ: {doc.get('source_type')} | Quelle: {doc.get('source')} | Score: {doc.get('score'):.3f}]\n{doc.get('text')}"
-        )
-    return "\n\n---\n\n".join(blocks)
+        source = fix_email_clutter(doc.get("source", ""))
+        chunk_text = fix_email_clutter(doc.get("text", ""))
+        score = doc.get("score", 0.0)
 
+        header = (
+            f"[Kontext {i} | Priorität: {doc.get('priority')} | "
+            f"Typ: {doc.get('source_type')} | Quelle: {source} | "
+            f"Score: {score:.3f}]"
+        )
+
+        blocks.append(header + "\\n" + chunk_text)
+
+    return "\\n\\n---\\n\\n".join(blocks)
 
 def readable_source_label(source: str) -> str:
     if "ub-basel-bot-wahrheiten.md" in source:
