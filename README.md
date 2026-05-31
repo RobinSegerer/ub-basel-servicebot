@@ -196,3 +196,24 @@ grep -i "psychologie" vectorstore/docs.jsonl | head
 grep -i "fachrefer" vectorstore/docs.jsonl | head
 grep -i "personen" vectorstore/discovered_urls.txt | head
 ```
+
+
+## Fix: überlange Embedding-Chunks
+
+Diese Version enthält einen zusätzlichen Sicherheitscheck vor dem Embedding. Überlange Chunks werden automatisch nochmals geteilt, damit der OpenAI-Embedding-Endpunkt nicht mit `maximum input length is 8192 tokens` abbricht.
+
+
+## Semantisch toleranteres Retrieval
+
+Diese Version verbessert die Suche, damit Nutzer:innen nicht exakt die richtigen Bibliotheksbegriffe eingeben müssen.
+
+Neu in `app.py`:
+
+- LLM-basierte Query Expansion vor dem Retrieval
+- HyDE-Suchtext: hypothetische passende UB-Webseitenpassage
+- mehrere Suchvektoren pro Frage
+- Dokument-Score nutzt den besten semantischen Treffer über Originalfrage, Expansion und HyDE
+- Keyword-Score und Quellenpriorität wirken nur moderat ergänzend
+- Spezialkatalogseiten bleiben auffindbar, werden für Servicefragen aber nachrangig behandelt
+
+Dafür ist kein neuer Crawl und kein neuer Embedding-Index nötig.
